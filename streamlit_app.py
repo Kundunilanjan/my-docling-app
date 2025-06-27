@@ -1,4 +1,3 @@
-
 import streamlit as st
 import os
 import tempfile
@@ -13,77 +12,82 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEndpoint
 
-# Hugging Face Token (set as environment variable or replace here)
+# Set Hugging Face Token (use secrets or env vars in production)
 HF_TOKEN = os.getenv("HF_TOKEN", "your_hf_token_here")
 
-# Streamlit UI setup
-st.set_page_config(page_title="📄 PDF Q&A with RAG", layout="wide")
+# Streamlit config
+st.set_page_config(page_title="📄 RAG on PDF", layout="wide")
 st.title("📄 Ask Questions on Uploaded PDF")
 
-# File and question input
+# Upload & input
 uploaded_file = st.file_uploader("📤 Upload a PDF", type="pdf")
-question = st.text_input("❓ Ask a question from the document:")
-run_button = st.button("🔎 Run RAG")
+question = st.text_input("❓ Ask a question about the document:")
+run_button = st.button("🔍 Run RAG")
 
-# Optional toggles
-show_pages = st.checkbox("📃 Show extracted PDF pages", value=False)
-show_chunks = st.checkbox("🧩 Show split text chunks", value=False)
+# Display toggles
+show_pages = st.checkbox("📃 Show full PDF pages")
+show_chunks = st.checkbox("🧩 Show chunked text")
 
-
-# Function to read PDF using fitz (PyMuPDF)
-def load_pdf_with_fitz(file_path):
+# PDF loader
+def load_pdf(file_path):
     doc = fitz.open(file_path)
-    pages = []
-    for i, page in enumerate(doc):
-        text = page.get_text()
-        if text.strip():  # skip blank pages
-            pages.append(Document(page_content=text, metadata={"page": i + 1}))
-    return pages
+    return [
+        Document(page_content=page.get_text(), metadata={"page": i + 1})
+        for i, page in enumerate(doc)
+        if page.get_text().strip()
+    ]
 
+# Clipping long text
+def clip(text, maxlen=500):
+    return text[:maxlen] + "..." if len(text) > maxlen else text
 
-# Run pipeline when button clicked
+# On Run
 if run_button:
     if not uploaded_file or not question:
-        st.warning("⚠️ Please upload a PDF and enter a question.")
+        st.warning("⚠️ Upload a PDF and ask a question.")
         st.stop()
 
-    with st.spinner("📖 Extracting text from PDF..."):
+    with st.spinner("📖 Reading and splitting the document..."):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             tmp.write(uploaded_file.read())
             tmp_path = tmp.name
 
-        st.markdown(f"✅ Uploaded File: `{uploaded_file.name}`")
-        docs = load_pdf_with_fitz(tmp_path)
+        st.success(f"✅ Uploaded: `{uploaded_file.name}`")
+        docs = load_pdf(tmp_path)
+
+        if not docs:
+            st.error("❌ No readable text found in PDF.")
+            st.stop()
 
         if show_pages:
-            st.markdown("### 📃 Extracted Pages:")
-            for i, doc in enumerate(docs):
-                st.markdown(f"**Page {doc.metadata['page']}**:\n```\n{doc.page_content[:500]}\n```")
+            st.subheader("📃 Extracted Pages")
+            for d in docs:
+                st.markdown(f"**Page {d.metadata['page']}**\n```\n{clip(d.page_content)}\n```")
 
         splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=200)
         chunks = splitter.split_documents(docs)
 
         if show_chunks:
-            st.markdown("### 🧩 Text Chunks:")
+            st.subheader("🧩 Split Text Chunks")
             for i, chunk in enumerate(chunks[:5]):
-                st.markdown(f"**Chunk {i+1}**:\n```\n{chunk.page_content[:500]}\n```")
+                st.markdown(f"**Chunk {i+1}**\n```\n{clip(chunk.page_content)}\n```")
 
-    with st.spinner("🔗 Embedding and indexing text..."):
-        embedder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        vectorstore = FAISS.from_documents(chunks, embedder)
+    with st.spinner("🔗 Embedding and indexing..."):
+        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        vectorstore = FAISS.from_documents(chunks, embeddings)
 
-    with st.spinner("🤖 Generating answer from RAG..."):
+    with st.spinner("🤖 Generating answer..."):
         retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
         llm = HuggingFaceEndpoint(
             repo_id="mistralai/Mixtral-8x7B-Instruct-v0.1",
-            huggingfacehub_api_token=HF_TOKEN,
-            task="text-generation"
+            task="text-generation",
+            huggingfacehub_api_token=HF_TOKEN
         )
 
         prompt = PromptTemplate.from_template(
             "Context:\n---------------------\n{context}\n---------------------\n"
-            "Answer the question based only on the above context.\n"
+            "Answer the question strictly based on the context above.\n"
             "Question: {input}\nAnswer:"
         )
 
@@ -93,17 +97,14 @@ if run_button:
         try:
             result = rag_chain.invoke({"input": question})
         except Exception as e:
-            st.error(f"❌ Error during LLM inference: {e}")
+            st.error(f"❌ Error during LLM inference:\n\n{e}")
             st.stop()
 
-        def clip(text, maxlen=500):
-            return text[:maxlen] + "..." if len(text) > maxlen else text
+        st.success("✅ Answer Generated")
+        st.markdown(f"**🧠 Q:** {result['input']}")
+        st.markdown(f"**💬 A:** {clip(result['answer'])}")
 
-        st.success("✅ Answer:")
-        st.markdown(f"**Q:** {result['input']}")
-        st.markdown(f"**A:** {clip(result['answer'])}")
-
-        st.markdown("### 📚 Source Snippets Used:")
+        st.subheader("📚 Source Contexts")
         for i, doc in enumerate(result["context"]):
             page = doc.metadata.get("page", "?")
-            st.markdown(f"**Snippet {i+1}** (Page {page}):\n> {clip(doc.page_content)}")
+            st.markdown(f"**Snippet {i+1}** (Page {page})\n> {clip(doc.page_content)}")
