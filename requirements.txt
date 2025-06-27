@@ -1,0 +1,11 @@
+streamlit
+langchain
+langchain-docling
+langchain-core
+docling-core
+docling
+langchain-huggingface
+langchain-milvus
+huggingface_hub
+sentence-transformers
+python-dotenv
