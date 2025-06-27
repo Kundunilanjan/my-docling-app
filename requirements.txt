@@ -1,11 +1,7 @@
 streamlit
+pymupdf
 langchain
-langchain-docling
-langchain-core
-docling-core
-docling
-langchain-huggingface
-langchain-milvus
-huggingface_hub
+faiss-cpu
 sentence-transformers
-python-dotenv
+huggingface_hub
+langchain_huggingface
