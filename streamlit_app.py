@@ -64,7 +64,7 @@ if uploaded_file:
             st.markdown("---")
 
     if images:
-        st.markdown("## 🖼️ Extracted Unique Images")
+        st.markdown("## 🖼️ Extracted All Images")
         cols = st.columns(3)
         for i, (hash_id, img_data) in enumerate(images.items()):
             img = Image.open(io.BytesIO(img_data))
