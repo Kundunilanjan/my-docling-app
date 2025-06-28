@@ -5,7 +5,7 @@ from langchain.schema import Document
 import io
 import hashlib
 
-st.set_page_config(page_title="📄 PDF Extractor", layout="wide")
+st.set_page_config(page_title="📄 PDF Extractor by langchain", layout="wide")
 st.title("🔍 PDF Extractor: Text, Metadata, Images, Links")
 
 uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
@@ -68,6 +68,6 @@ if uploaded_file:
         cols = st.columns(3)
         for i, (hash_id, img_data) in enumerate(images.items()):
             img = Image.open(io.BytesIO(img_data))
-            cols[i % 3].image(img, caption=f"Image {i+1}", use_column_width="always")
+            cols[i % 3].image(img, caption=f"Image {i+1}", use_container_width="always")
     else:
         st.info("No images found in the PDF.")
