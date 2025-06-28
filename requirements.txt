@@ -3,5 +3,3 @@ pymupdf
 langchain
 faiss-cpu
 sentence-transformers
-huggingface_hub
-langchain_huggingface
